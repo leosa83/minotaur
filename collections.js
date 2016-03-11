@@ -1,20 +1,48 @@
-Boards = new Mongo.Collection('boards');
+PlayerSessions = new Mongo.Collection('playerSessions');
 
-Players = new Mongo.Collection('players');
+PlayerSession = Astro.Class({
+  name:'PlayerSession',
+  fields: {
+    sessionId: {
+      type:'string',
+      default: function() {
+        return Random.id();
+      }
+    },
+    boards: {
+      type: 'array',
+      nested: 'Board'
+    },
+    nickName: 'string' // if set then overrides the nickName of any userprofile associated with this session 
+  }
+});
 
-Player = Astro.Class({
+Player = Astro.Class({ // a player is confined to a single board
   name:'Player',
-  collection: Players,
   fields: {
     name:'string',
-    operations: {
-      type:'array',
-      nested: {
-        name:'Operation',
-        fields: {
-          typeOf: 'string',
-          validators: {
-            typeOf: Validators.choice(['add','remove'])
+    nickName: 'string',
+    controller: { //who is the controller of this player
+      type:'object',
+      nested:'PlayerSession',
+      default: function() {
+        return {};
+      }
+    },
+    playerState: { // a player state is associated with a single board state, the gamestate keeps track of the current player state
+      name: 'PlayerState',
+      fields: {
+        alive: 'boolean',
+        operations: {
+          type:'array',
+          nested: {
+            name:'Operation',
+            fields: {
+              typeOf: 'string',
+              validators: {
+                typeOf: Validators.choice(['add','remove'])
+              }
+            }
           }
         }
       }
@@ -22,16 +50,10 @@ Player = Astro.Class({
   }
 });
 
-PlayerSessions = new Mongo.Collection('playerSessions');
-
-PlayerSession = Astro.Class({
-  name:'PlayerSession',
-  fields: {
-    sessionId:'string',
-    boards: {
-      type: 'array',
-      nested: 'Board'
-    }
+MonsterState = Astro.Class({
+  name:'MonsterState',
+  fields:{
+    
   }
 });
 
@@ -48,7 +70,6 @@ UserProfile = Astro.Class({
 
 Board = Astro.Class({
   name:'Board',
-  collection: Boards,
   fields: {
     sizeX:'number',
     sizeY:'number',
@@ -64,9 +85,13 @@ Board = Astro.Class({
     boardState: {
       type: 'object',
       nested: {
-        name:'State',
+        name:'BoardState',
         timeStamp: 'date',
         fields: {
+          stateController: { //what player is controlling this state of the board
+            type: 'object',
+            nested: 'Player'
+          },
           cells: {
             type:'array',
             nested: {
@@ -74,32 +99,7 @@ Board = Astro.Class({
               fields: {
                 players: {
                   type: 'array',
-                  nested: {
-                    name:'Player',
-                    fields: {
-                      name:'string',
-                      nickName: 'string',
-                      controller: { //who is the controller of this player
-                        type:'object',
-                        nested:'PlayerSession',
-                        default: function() {
-                          return {};
-                        }
-                      },
-                      operations: {
-                        type:'array',
-                        nested: {
-                          name:'Operation',
-                          fields: {
-                            typeOf: 'string',
-                            validators: {
-                              typeOf: Validators.choice(['add','remove'])
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
+                  nested: 'Player'
                 },
                 walls: {
                   type:'array', //several 'up' typeOf wall in the array means that many layers etc
@@ -122,4 +122,47 @@ Board = Astro.Class({
     },
   }
 });
+
+Games = new Mongo.Collection('games');
+
+GameState = Astro.Class({
+  name:'GameState',
+  fields: {
+    boardState: { //what is the state of the board
+      type:'object',
+      nested: 'BoardState'
+    },
+    players: { //who are playing the game
+      type:'object',
+      nested:'Player'
+    },
+    spectators: { // who are watching the game
+      type: 'array',
+      nested:'PlayerSession',
+    }
+  }
+});
+
+Game = Astro.Class({ // a game holds all info of a game such as number of rounds played , points, wins , etc
+  name:'Game',
+  collection: Games,
+  fields: {
+    board: { // A game has a single board and a board is associated with a single game
+      type:'object',
+      nested:'Board'
+    },
+    createdAt: 'date',
+    creator: {
+      type:'object',
+      nested:'UserProfile'
+    },
+    gameStates: { // the head of the stack is the current state - the tail is the history
+      type:'array',
+      nested: 'GameState'
+    }
+  }
+});
+
+
+
 
