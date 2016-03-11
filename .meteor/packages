@@ -19,3 +19,5 @@ autopublish             # Publish all data to the clients (for prototyping)
 insecure                # Allow all DB writes from clients (for prototyping)
 jagi:astronomy
 peerlibrary:blaze-components
+jagi:astronomy-validators
+random
