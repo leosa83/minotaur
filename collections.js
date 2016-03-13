@@ -47,6 +47,80 @@ PlayerState = ActorState.inherit({
     }
   }
 });
+CellState = ActorState.inherit({
+  name:'CellState',
+  fields: {
+    walls: {
+      type:'array',
+      nested: {
+        name:'Wall',
+        fields: {
+         typeOf:'string',
+         validators: {
+           typeOf:Validators.choice(['up','down','left','right'])
+         } 
+        }
+      }
+    }
+  }
+});
+
+Rule = Astro.Class({ //checks if a state is allowed //TODO: wrap a set of states into an object, this object can be set, then the allowed function works on that, this allows to attach rules to objects that will auto validate themselves on statechange
+  name:'Rule',
+  fields: {
+    description:'string',
+    typeOf:'string',
+    allowed: function(fromState,toState,action,gameContext,gameState) {
+      return true;
+    },
+    validators: {
+      typeOf:Validators.choice(['state','action','actor']) //to what does the rule apply // state => checks if a state is allowed , action => checks if a state change is allowed , actor => checks if...
+    }
+  }
+});
+
+GameRules = Astro.Class({
+  name:'GameRules',
+  fields: {
+    rules: {
+      type:'array',
+      nested:'Rule'
+    }
+  }
+});
+GameContext = Astro.Class({
+  name:'GameContext',
+  fields: {
+    boardSize: {
+      type:'object',
+      nested: {
+        name:'Size',
+        fields: {
+          x:'number',
+          y:'number'
+        }
+      }
+    },
+    actorSlots: {
+      type:'array',
+      nested: {
+        name:'ActorSlot', // maps an actor with a slot id - purpose to be able to know whose turn it is , slot id implicit from position in the array, An empty actor slot means there is room for more players
+        fields: {
+          actor: {
+            type:'object',
+            nested:'Actor'
+          }
+        }
+      }
+    },
+    controller: 'number', // the actor in the actorSlots who is in control of the game 
+    nextController:function(controller) {
+      if(controller==null) {
+        return (this.controller+1)%+this.actorSlots.length
+      }
+    }
+  }
+});
 Actor = GameObject.inherit({
   name:'Actor',
   fields: {
