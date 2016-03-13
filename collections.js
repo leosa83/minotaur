@@ -1,4 +1,146 @@
+//TODO: implement GameRule ,ActorSlot
+
 PlayerSessions = new Mongo.Collection('playerSessions');
+
+State = Astro.Class({
+  name:'State'
+});
+GameObject = Astro.Class({
+  name:'GameObject',
+  fields: {
+    state:{
+      type:'object',
+      nested:'State'
+    }
+  }
+});
+ActorState = State.inherit({
+  name:'ActorState',
+  fields: {
+    position: {
+      type:'object',
+      nested: {
+        name:'Position',
+        fields: {
+          x:'number',
+          y:'number'
+        }
+      }
+    }
+  }
+});
+PlayerState = ActorState.inherit({
+  name: 'PlayerState',
+  fields: {
+    alive: 'boolean',
+    operations: {
+      type:'array',
+      nested: {
+        name:'Operation',
+        fields: {
+          typeOf: 'string',
+          validators: {
+            typeOf: Validators.choice(['add','remove'])
+          }
+        }
+      }
+    }
+  }
+});
+Actor = GameObject.inherit({
+  name:'Actor',
+  fields: {
+    gameController: {
+      type:'object',
+      nested:'GameController'
+    }
+  }
+});
+ActorController = Astro.Class({
+  name:'ActorController',
+  fields: {
+    actor: {
+      type:'object',
+      nested:'Actor'
+    }
+  }
+});
+AIController = ActorController.inherit({
+  name:'AIController',
+  fields: {
+    gameRules: {
+      type:'array',
+      nested:'GameRule'
+    },
+    gameState: {
+      type:'object',
+      nested:'GameState'
+    }
+  }
+});
+AIMonster = AIController.inherit({
+  name:'AIMonster'
+});
+MonsterState = ActorState.inherit({
+  name:'MonsterState',
+  fields: {
+    behavior: {
+      type:'object',
+      nested:'AIMonster'
+    }
+  }
+});
+Action = Astro.Class({
+  name:'Action',
+  fields: {
+    commands: {
+      type:'array',
+      nested: {
+        name:'Command',
+        fields: {
+          gameObject: { //what GameObject to change
+            type:'object',
+            nested:'GameObject'
+          },
+          toState: {
+            type:'object',
+            nested:'State'
+          }
+        }
+      }
+    }
+  }
+});
+ActionFactory = Astro.Class({  // describes a mapping between an event and an action to take
+  name:'ActionFactory',
+  fields: {
+    action:{
+      type:'object',
+      nested:'Action'
+    },
+    event: {
+      type:'object',
+      nested:'Event'
+    }
+  }
+});
+GameController = Astro.Class({
+  name:'GameController',
+  fields: {
+    actionFactories: { // describes the full set of event action mappers that make up the interaction or game mechanics
+      type:'array',
+      nested:'ActionFactory'
+    }
+  }
+});
+
+
+Player = Actor.inherit({
+  name:'Player'
+});
+Monster = Actor.inherit({
+  name:'Monster'
+});
 
 PlayerSession = Astro.Class({
   name:'PlayerSession',
@@ -9,11 +151,11 @@ PlayerSession = Astro.Class({
         return Random.id();
       }
     },
-    boards: {
+    games: {
       type: 'array',
-      nested: 'Board'
+      nested: 'Game'
     },
-    nickName: 'string' // if set then overrides the nickName of any userprofile associated with this session 
+    nickName: 'string' // if set then overrides the nickName of any userprofile associated with this session
   }
 });
 
@@ -27,24 +169,6 @@ Player = Astro.Class({ // a player is confined to a single board
       nested:'PlayerSession',
       default: function() {
         return {};
-      }
-    },
-    playerState: { // a player state is associated with a single board state, the gamestate keeps track of the current player state
-      name: 'PlayerState',
-      fields: {
-        alive: 'boolean',
-        operations: {
-          type:'array',
-          nested: {
-            name:'Operation',
-            fields: {
-              typeOf: 'string',
-              validators: {
-                typeOf: Validators.choice(['add','remove'])
-              }
-            }
-          }
-        }
       }
     }
   }
@@ -68,11 +192,79 @@ UserProfile = Astro.Class({
   }
 });
 
+GameContext = Astro.Class({
+  name:'GameContext',
+  fields: {
+    size: {
+      type:'object',
+      nested: {
+        name:'Size',
+        fields:{
+          x:'number',
+          y:'number'
+        }
+      }
+    }
+  }
+});
+
+
+
+Games = new Mongo.Collection('games');
+
+GameState = Astro.Class({
+  name:'GameState',
+  fields: {
+    cellStates: {
+      type:'array',
+      nested:'CellState'
+    },
+    monsterStates: {
+      type:'array',
+      nested:'MonsterState'
+    },
+    playerStates: {
+      type:'array',
+      nested:'PlayerState'
+    }
+  }
+});
+
+Game = Astro.Class({ // a game holds all info of a game such as number of rounds played , points, wins , etc
+  name:'Game',
+  collection: Games,
+  fields: {
+    gameContext: { // A game has a single board and a board is associated with a single game
+      type:'object',
+      nested:'GameContext'
+    },
+    createdAt: 'date',
+    creator: {
+      type:'object',
+      nested:'UserProfile'
+    },
+    gameStates: { // the head of the stack is the current state - the tail is the history
+      type:'array',
+      nested: 'GameState'
+    }
+  }
+});
+
+//// 
+/*
 Board = Astro.Class({
   name:'Board',
   fields: {
-    sizeX:'number',
-    sizeY:'number',
+    size: {
+      type:'object',
+      nested: {
+        name:'Size',
+        fields:{
+          x:'number',
+          y:'number'
+        }
+      }
+    },
     createdAt: 'date',
     controllers: {
       type:'array',
@@ -122,47 +314,6 @@ Board = Astro.Class({
     },
   }
 });
-
-Games = new Mongo.Collection('games');
-
-GameState = Astro.Class({
-  name:'GameState',
-  fields: {
-    boardState: { //what is the state of the board
-      type:'object',
-      nested: 'BoardState'
-    },
-    players: { //who are playing the game
-      type:'object',
-      nested:'Player'
-    },
-    spectators: { // who are watching the game
-      type: 'array',
-      nested:'PlayerSession',
-    }
-  }
-});
-
-Game = Astro.Class({ // a game holds all info of a game such as number of rounds played , points, wins , etc
-  name:'Game',
-  collection: Games,
-  fields: {
-    board: { // A game has a single board and a board is associated with a single game
-      type:'object',
-      nested:'Board'
-    },
-    createdAt: 'date',
-    creator: {
-      type:'object',
-      nested:'UserProfile'
-    },
-    gameStates: { // the head of the stack is the current state - the tail is the history
-      type:'array',
-      nested: 'GameState'
-    }
-  }
-});
-
-
+*/
 
 
