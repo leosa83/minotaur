@@ -85,6 +85,19 @@ GameRules = Astro.Class({
     rules: {
       type:'array',
       nested:'Rule'
+    },
+    addRule:function(rule) {
+      if(rule.validate()) { // is the rule properly defined
+        this.rules.push(rule); 
+      } //else fire some validation error
+    },
+    checkCompliance: function(gameContext,gameState) {
+      _.each(this.rules,function(rule){
+        //check the compliance of each list in the gamestate
+        _.each(this.gameState.cellStates,function(cellstate){
+          
+        },{that:this,cellStates:cellStates});
+      },{that:this,gameState:gameState,gameContext:gameContext});
     }
   }
 });
