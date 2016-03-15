@@ -11,7 +11,12 @@ GameObject = Astro.Class({
     state:{
       type:'object',
       nested:'State'
-    }
+    },
+    nextState: {
+      type:'object',
+      nested:'State'
+    },
+    changeState:'boolean'
   }
 });
 ActorState = State.inherit({
@@ -47,13 +52,14 @@ PlayerState = ActorState.inherit({
     }
   }
 });
+//todo fix the walls
 CellState = ActorState.inherit({
   name:'CellState',
   fields: {
     walls: {
       type:'array',
       nested: {
-        name:'Wall',
+        type:'Wall',
         fields: {
          typeOf:'string',
          validators: {
@@ -65,81 +71,15 @@ CellState = ActorState.inherit({
   }
 });
 
-Rule = Astro.Class({ //checks if a state is allowed //TODO: wrap a set of states into an object, this object can be set, then the allowed function works on that, this allows to attach rules to objects that will auto validate themselves on statechange
-  name:'Rule',
-  fields: {
-    description:'string',
-    typeOf:'string',
-    allowed: function(fromState,toState,action,gameContext,gameState) {
-      return true;
-    },
-    validators: {
-      typeOf:Validators.choice(['state','action','actor']) //to what does the rule apply // state => checks if a state is allowed , action => checks if a state change is allowed , actor => checks if...
-    }
-  }
-});
-
-GameRules = Astro.Class({
-  name:'GameRules',
-  fields: {
-    rules: {
-      type:'array',
-      nested:'Rule'
-    },
-    addRule:function(rule) {
-      if(rule.validate()) { // is the rule properly defined
-        this.rules.push(rule); 
-      } //else fire some validation error
-    },
-    checkCompliance: function(gameContext,gameState) {
-      _.each(this.rules,function(rule){
-        //check the compliance of each list in the gamestate
-        _.each(this.gameState.cellStates,function(cellstate){
-          
-        },{that:this,cellStates:cellStates});
-      },{that:this,gameState:gameState,gameContext:gameContext});
-    }
-  }
-});
-GameContext = Astro.Class({
-  name:'GameContext',
-  fields: {
-    boardSize: {
-      type:'object',
-      nested: {
-        name:'Size',
-        fields: {
-          x:'number',
-          y:'number'
-        }
-      }
-    },
-    actorSlots: {
-      type:'array',
-      nested: {
-        name:'ActorSlot', // maps an actor with a slot id - purpose to be able to know whose turn it is , slot id implicit from position in the array, An empty actor slot means there is room for more players
-        fields: {
-          actor: {
-            type:'object',
-            nested:'Actor'
-          }
-        }
-      }
-    },
-    controller: 'number', // the actor in the actorSlots who is in control of the game 
-    nextController:function(controller) {
-      if(controller==null) {
-        return (this.controller+1)%+this.actorSlots.length
-      }
-    }
-  }
-});
 Actor = GameObject.inherit({
   name:'Actor',
   fields: {
     gameController: {
       type:'object',
       nested:'GameController'
+    },
+    move: function(direction) {
+      this.GameController.move(this,direction);
     }
   }
 });
@@ -177,46 +117,66 @@ MonsterState = ActorState.inherit({
     }
   }
 });
-Action = Astro.Class({
-  name:'Action',
-  fields: {
-    commands: {
-      type:'array',
-      nested: {
-        name:'Command',
-        fields: {
-          gameObject: { //what GameObject to change
-            type:'object',
-            nested:'GameObject'
-          },
-          toState: {
-            type:'object',
-            nested:'State'
-          }
-        }
-      }
-    }
-  }
-});
-ActionFactory = Astro.Class({  // describes a mapping between an event and an action to take
-  name:'ActionFactory',
-  fields: {
-    action:{
-      type:'object',
-      nested:'Action'
-    },
-    event: {
-      type:'object',
-      nested:'Event'
-    }
-  }
-});
+
 GameController = Astro.Class({
   name:'GameController',
   fields: {
-    actionFactories: { // describes the full set of event action mappers that make up the interaction or game mechanics
-      type:'array',
-      nested:'ActionFactory'
+    game: {
+      type:'object',
+      nested:'Game'
+    },
+    move:function(actor,direction,gameState) {
+      var from = actor.state.position;
+      //only players and monsters can move
+      if(!(actor instanceof Cell)) {
+        //distance can only be 1 and only in one direction
+        let dx = 0;
+        let dy = 0;
+        switch(direction) {
+          case 'up':
+            dy=-1;
+            break;
+          case 'down':
+            dy=1;
+            break;
+          case 'left':
+            dx=-1;
+            break;
+          case 'right':
+            dx=1;
+            break;
+        }
+        var nextState =  _.extend({},actor.state);
+        nextState.position.x +=dx;
+        nextState.position.y +=dy;
+        
+        //find the cellstate with this position
+        var thecell = {};
+        _.each(this.game.gameState.cellStates,function(cellstate,index,cellStates) {
+          if(cellstate.position.x==this.from.x && cellstate.position.y==this.from.y) {
+            _.find(cellstate.walls,function(wall){
+              return wall==direction;
+            },{direction:direction})
+          } 
+        },{thecell:thecell,from:from,direction:direction});
+        
+        
+        
+        
+        actor.nextState=nextState;
+        actor.changeState = true;
+        
+        
+        if()
+      }
+      else {
+        console.log('cells are imovable');
+      }
+    },
+    validators: {
+      actor: function() {
+        this.actor.validate();
+      }
     }
   }
 });
