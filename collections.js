@@ -71,6 +71,51 @@ CellState = ActorState.inherit({
   }
 });
 
+AIBehavior = Astro.Class({ //TODO: fix the ai
+  name:'AIController',
+  fields: {
+    library: {
+      type:'object',
+      nested: {
+        name:'behaviors',
+        fields: {
+          closestActorByDimension: function(from,positions,dimension) {
+            //find the closest players in a dimension
+            var dxys = _.map(positions,function(position,index,list){
+              return Math.abs(this.from[dimension]-position[dimension]);
+            },{from:from});
+            
+            var minimumdistance = _.min(dxys);
+            
+            var indexes = _.filter(dxys,function(num){return num==this.minimumdistance;},{minimumdistance:minimumdistance});
+            
+            return indexes;
+          },
+          classicTheseusMoveDirection:function(from,positions) {
+            var target;
+            //check which position i closest in x
+            var closestx = closestActorByDimension(from,positions,'x');
+            if(closestx.length>1) {
+              //check which closest by y
+              var closesty = closestActorByDimension(from,positions,'y');
+              
+              if(closesty.length>1) {
+                //choose the first in x
+                target = positions[closestx[0]];
+              }
+            }
+            
+            //calculate the direction
+            const dx = target.x-from.x < 0 ? -1: target.x-from.x >= 1 ? 1: 0;
+            const dy = target.y-from.y < 0 ? -1: target.y-from.y >= 1 ? 1: 0;
+
+          }
+        }
+      }
+    }
+  }
+});
+
 Actor = GameObject.inherit({
   name:'Actor',
   fields: {
@@ -78,8 +123,8 @@ Actor = GameObject.inherit({
       type:'object',
       nested:'GameController'
     },
-    move: function(direction) {
-      this.GameController.move(this,direction);
+    move: function(actorController,direction) {
+      this.gameController.move(this,direction);
     }
   }
 });
@@ -95,13 +140,8 @@ ActorController = Astro.Class({
 AIController = ActorController.inherit({
   name:'AIController',
   fields: {
-    gameRules: {
-      type:'array',
-      nested:'GameRule'
-    },
-    gameState: {
-      type:'object',
-      nested:'GameState'
+    actor: {
+      type:'object'
     }
   }
 });
@@ -125,7 +165,7 @@ GameController = Astro.Class({
       type:'object',
       nested:'Game'
     },
-    move:function(actor,direction,gameState) {
+    move:function(actor,direction) {
       var from = actor.state.position;
       //only players and monsters can move
       if(!(actor instanceof Cell)) {
@@ -151,31 +191,31 @@ GameController = Astro.Class({
         nextState.position.y +=dy;
         
         //find the cellstate with this position
-        var thecell = {};
-        _.each(this.game.gameState.cellStates,function(cellstate,index,cellStates) {
-          if(cellstate.position.x==this.from.x && cellstate.position.y==this.from.y) {
-            _.find(cellstate.walls,function(wall){
-              return wall==direction;
-            },{direction:direction})
-          } 
+        var thecell = _.find(this.game.gameState.cellStates,function(cellstate,index,cellStates) {
+          return cellstate.position.x==this.from.x && cellstate.position.y==this.from.y && _.indexOf(cellstate.walls,this.direction)<0; //if found and the cell doesnt have a wall in the direction of the move
         },{thecell:thecell,from:from,direction:direction});
         
-        
-        
-        
-        actor.nextState=nextState;
-        actor.changeState = true;
-        
-        
-        if()
+        if(thecell==undefined) {
+          nextState.position.x +=dx;
+          nextState.position.y +=dy;
+          actor.changeState = true;
+          actor.nextState=nextState;
+        }
+        else {
+          actor.changeState = false;
+        }
       }
       else {
-        console.log('cells are imovable');
+        // actor is a cell, a cell cant move
+        console.log('Cells are imovable: you are trying to move cell: \n'+actor.toString());
       }
     },
     validators: {
       actor: function() {
         this.actor.validate();
+      },
+      game: function() {
+        this.game.validate();
       }
     }
   }
