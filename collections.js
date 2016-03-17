@@ -31,7 +31,8 @@ ActorState = State.inherit({
           y:'number'
         }
       }
-    }
+    },
+    moves:'number'
   }
 });
 PlayerState = ActorState.inherit({
@@ -53,7 +54,7 @@ PlayerState = ActorState.inherit({
   }
 });
 //todo fix the walls
-CellState = ActorState.inherit({
+CellState = State.inherit({
   name:'CellState',
   fields: {
     walls: {
@@ -65,6 +66,16 @@ CellState = ActorState.inherit({
          validators: {
            typeOf:Validators.choice(['up','down','left','right'])
          } 
+        }
+      }
+    },
+    position: {
+      type:'object',
+      nested: {
+        name:'Position',
+        fields: {
+          x:'number',
+          y:'number'
         }
       }
     }
@@ -79,25 +90,37 @@ AIBehavior = Astro.Class({ //TODO: fix the ai
       nested: {
         name:'behaviors',
         fields: {
-          closestActorByDimension: function(from,positions,dimension) {
-            //find the closest players in a dimension
-            var dxys = _.map(positions,function(position,index,list){
-              return Math.abs(this.from[dimension]-position[dimension]);
-            },{from:from});
-            
-            var minimumdistance = _.min(dxys);
-            
-            var indexes = _.filter(dxys,function(num){return num==this.minimumdistance;},{minimumdistance:minimumdistance});
-            
-            return indexes;
+          algorithms: {
+            type:'object',
+            nested: {
+              name:'Algorithms',
+              fields: {
+                closestPositionsByDimension: function(from,positions,dimension) {
+                  //find the closest players in a dimension
+                  var dxys = _.map(positions,function(position,index,list){
+                    return {position:position,dxy:Math.abs(this.from[dimension]-position[dimension])};
+                  },{from:from});
+                  
+                  //return position = positions[_.indexOf(dxys,_.min(dxys))]
+                  //return _.filter(dxys,function(dxy) {return dxy = this.min;},{min:_.min(dxys)});
+                  return _.map(positions,function(position,index,list){
+                    return list[]
+                  },{dxys:dxys})
+                }
+              }
+            }
           },
           classicTheseusMoveDirection:function(from,positions) {
+            //returns left , right , up, down , null
             var target;
             //check which position i closest in x
-            var closestx = closestActorByDimension(from,positions,'x');
+            var closestx = this.algorithms.closestPositionsByDimension(from,positions,'x');
+            
             if(closestx.length>1) {
               //check which closest by y
-              var closesty = closestActorByDimension(from,positions,'y');
+              var closesty = _.map(this.algorithms.closestPositionsByDimension(from,positions,'y'),function(closestindex,index,array){
+                return this.positions[closestindex];
+              },{positions:positions});
               
               if(closesty.length>1) {
                 //choose the first in x
@@ -108,64 +131,94 @@ AIBehavior = Astro.Class({ //TODO: fix the ai
             //calculate the direction
             const dx = target.x-from.x < 0 ? -1: target.x-from.x >= 1 ? 1: 0;
             const dy = target.y-from.y < 0 ? -1: target.y-from.y >= 1 ? 1: 0;
-
+            
+            // x moves are prio
+            return dx < 0 ? 'left': dx > 0 ? 'right' : dy < 0 ? 'up': dy > 0 ? 'down' : null;  
           }
         }
       }
     }
   }
 });
-
-Actor = GameObject.inherit({
+  Actors = Mongo.Collection('actors');
+  Actor = GameObject.inherit({
   name:'Actor',
+  collection:'Actors',
   fields: {
+    actorIndex:'number',
     gameController: {
       type:'object',
       nested:'GameController'
     },
-    move: function(actorController,direction) {
+    move: function(sessionId,controllerId,direction) {
       this.gameController.move(this,direction);
+    },
+    operate:function(sessionId,controllerId,operation,position) {
+      if(this.sessionController[sessionId==controllerId]) {
+        this.gameController.operate(this,operations,position);
+      }
+      else {
+        console.log('this session doesnt have the correct controller registered');
+      }
+    },
+    defaultMoves:'number',
+    //controllers allowd to control this actor
+    controllers: {
+      type:'array',
+      nested:'string'
     }
   }
 });
 ActorController = Astro.Class({
   name:'ActorController',
   fields: {
-    actor: {
-      type:'object',
-      nested:'Actor'
+    move: function(gameSession,direction) {
+      //check if the sessionid is ok
+      var game = gameSession.game;
+      var gameState = game.gameState;
+      var actor = game
+      
+      //move the actor passing this
+      this.actor.move(this,direction);
+    },
+    sessionIds: {
+      type:'array',
+      nested:'string'
+    },
+    registerSession: function(sessionId,controllerId) {
+      if(this.sessionController==null) {
+        //check if the controller id is registered
+        if(true){}
+        //register the session controller
+        this.sessionController[sessionId] = controllerId;        
+      }
+      else {
+        console.log('controller for this session already registered, create a new controller');
+      }
     }
   }
 });
 AIController = ActorController.inherit({
   name:'AIController',
   fields: {
-    actor: {
-      type:'object'
+    behavior: {
+      type:'object',
+      nested:'AIBehavior'
     }
   }
 });
-AIMonster = AIController.inherit({
-  name:'AIMonster'
-});
+
 MonsterState = ActorState.inherit({
   name:'MonsterState',
   fields: {
-    behavior: {
-      type:'object',
-      nested:'AIMonster'
-    }
+    berserk:'boolean',
   }
 });
 
 GameController = Astro.Class({
   name:'GameController',
   fields: {
-    game: {
-      type:'object',
-      nested:'Game'
-    },
-    move:function(actor,direction) {
+    move:function(gameSession,actor,direction) {
       var from = actor.state.position;
       //only players and monsters can move
       if(!(actor instanceof Cell)) {
@@ -221,75 +274,70 @@ GameController = Astro.Class({
   }
 });
 
-
+Cell = Actor.inherit({
+  name:'Cell',
+  states: {
+    type:'array',
+    nested:'Cellstate'
+  }
+});
 Player = Actor.inherit({
-  name:'Player'
+  name:'Player',
+  states: {
+    type:'array',
+    nested:'PlayerState'
+  }
 });
 Monster = Actor.inherit({
-  name:'Monster'
+  name:'Monster',
+  states: {
+    type:'array',
+    nested:'MonsterState'
+  }
 });
-
-PlayerSession = Astro.Class({
-  name:'PlayerSession',
+GameSessions = Mongo.Collection('gameSessions');
+GameSession = Astro.Class({
+  name:'GameSession',
+  collection:GameSessions,
   fields: {
+    user: {
+      type:'object',
+      nested:'User'
+    },
+    game: {
+      type:'object',
+      nested:'Game'
+    },
     sessionId: {
       type:'string',
       default: function() {
         return Random.id();
       }
     },
-    games: {
-      type: 'array',
-      nested: 'Game'
-    },
-    nickName: 'string' // if set then overrides the nickName of any userprofile associated with this session
-  }
-});
-
-Player = Astro.Class({ // a player is confined to a single board
-  name:'Player',
-  fields: {
-    name:'string',
+    // if set then overrides the nickName of any userprofile associated with this session
     nickName: 'string',
-    controller: { //who is the controller of this player
-      type:'object',
-      nested:'PlayerSession',
-      default: function() {
-        return {};
-      }
-    }
   }
 });
 
-MonsterState = Astro.Class({
-  name:'MonsterState',
-  fields:{
-    
-  }
-});
 
 UserProfile = Astro.Class({
   name:'UserProfile',
   fields: {
     nickname: 'string',
-    playerSessions: {
+    userSessions: {
       type:'array',
-      nested:'PlayerSession'
-    }
-  }
-});
-
-GameContext = Astro.Class({
-  name:'GameContext',
-  fields: {
-    size: {
-      type:'object',
-      nested: {
-        name:'Size',
-        fields:{
-          x:'number',
-          y:'number'
-        }
+      nested:'GameSession'
+    },
+    gamesPlayed: {
+      type:'array',
+      nested:'Game',
+      transient:true,
+      default: function() {
+        _.map(this.userSession,function(session,index,sessions){
+          return _.map(session.gameSessions,function(gameSession,index,gameSessions){
+            return gameSession.game;
+          });
+        });
       }
     }
   }
@@ -297,38 +345,66 @@ GameContext = Astro.Class({
 
 
 
-Games = new Mongo.Collection('games');
+
 
 GameState = Astro.Class({
   name:'GameState',
   fields: {
-    cellStates: {
-      type:'array',
-      nested:'CellState'
+    context: {
+      type:'object',
+      nested: {
+        name:'Context',
+        fields: {
+          size: {
+            type:'object',
+            nested: {
+              name:'Size',
+              fields:{
+                x:'number',
+                y:'number'
+              }
+            }
+          },
+          turn: 'number'
+        }
+      }
     },
-    monsterStates: {
+    actors: {
       type:'array',
-      nested:'MonsterState'
+      nested:'Actor'
     },
-    playerStates: {
+    cells: {
       type:'array',
-      nested:'PlayerState'
+      nested:'Cell',
+      default:function() {
+        
+      }
+    },
+    init:function() {
+      this.actors[0] = new Monster();
+      this.actors[1] = new Player();
     }
   }
 });
+
+Games = new Mongo.Collection('games');
 
 Game = Astro.Class({ // a game holds all info of a game such as number of rounds played , points, wins , etc
   name:'Game',
   collection: Games,
   fields: {
-    gameContext: { // A game has a single board and a board is associated with a single game
-      type:'object',
-      nested:'GameContext'
-    },
     createdAt: 'date',
-    creator: {
+    owner: {
       type:'object',
       nested:'UserProfile'
+    },
+    gameSessions:{
+      type:'array',
+      nested:'GameSession'
+    },
+    registerSession: function(gameSession) {
+      this.gameSessions.push(gameSession);
+      return this.gameSessions.length-1; //actor index
     },
     gameStates: { // the head of the stack is the current state - the tail is the history
       type:'array',
